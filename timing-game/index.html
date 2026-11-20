@@ -675,6 +675,9 @@
     if(game.phase === "prep"){
       game.phase = "run";
       el.hitBtn.disabled = false;
+      el.stHint.textContent = state.mode === "hide"
+        ? "59.500초부터 숫자를 가려요 · 신호음 리듬으로 눌러요"
+        : "정각 00.000초에 맞춰 눌러요";
     }
 
     const passed = srv - nb;              // 정각 이후 경과
