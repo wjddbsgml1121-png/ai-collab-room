@@ -184,11 +184,12 @@
   }
   .g-cursor.frozen{opacity:0}
   .g-blind{
-    position:absolute; right:0; top:0; bottom:0; display:none; border-radius:0 8px 8px 0;
-    align-items:center; justify-content:center; color:#a2a8c6; font-size:11px; font-weight:800; letter-spacing:3px;
-    background:repeating-linear-gradient(135deg,#1b1f30,#1b1f30 7px,#232840 7px,#232840 14px);
+    position:absolute; right:-2px; top:0; bottom:0; display:none; border-radius:0 8px 8px 0;
+    background:repeating-linear-gradient(135deg,#252b40,#252b40 6px,#323a5c 6px,#323a5c 12px);
+    box-shadow:inset 1px 0 0 rgba(255,255,255,.14);
   }
-  .gauge.blind .g-blind{display:flex}
+  .gauge.blind .g-blind{display:block}
+  .gauge.blind .g-cursor{opacity:0}
   .g-pin{
     position:absolute; left:0; top:-7px; bottom:-7px; width:2px; margin-left:-1px; border-radius:2px;
     background:currentColor; opacity:0; transition:opacity .12s;
@@ -345,7 +346,7 @@
             <div class="g-axis">
               <div class="g-fill" id="gFill"></div>
               <div class="g-ticks" id="gTicks"></div>
-              <div class="g-blind" id="gBlind"><span>•••</span></div>
+              <div class="g-blind" id="gBlind"></div>
               <div class="g-zone" id="gZone"></div>
               <div class="g-goal" id="gGoal"></div>
               <div class="g-cursor" id="gCursor"></div>
