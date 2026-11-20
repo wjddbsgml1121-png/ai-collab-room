@@ -252,7 +252,7 @@
     <div class="stage" id="stage">
       <div class="st-head" id="stHead">시작 전</div>
       <div class="st-time mono" id="stTime">--.---</div>
-      <div class="st-hint" id="stHint">시작하기를 누르면 55.000초부터 카운트해요</div>
+      <div class="st-hint" id="stHint">시작하기를 누르면 바로 5 · 4 · 3 · 2 · 1 카운트가 시작돼요</div>
       <div class="bar"><i id="barFill"></i></div>
     </div>
 
@@ -285,7 +285,7 @@
     <p>
       <b>1.</b> 폰 시계는 저절로 조금씩 틀어져요. 연습 시작 전에 <b>자동 측정</b>을 한 번 눌러 주세요.<br>
       <b>2.</b> 기록이 3개 이상 쌓였는데 평균이 계속 한쪽으로 쏠리면, 그만큼 <b>미세조정</b>으로 밀어 주면 돼요.<br>
-      <b>3.</b> 가리고 연습은 59.500초부터 숫자를 가려요. 신호음을 리듬 삼아 눈을 감고 눌러 보세요.<br>
+      <b>3.</b> 가리고 연습은 마지막 0.5초(0.500 → 0.000)만 숫자를 가려요. 신호음을 리듬 삼아 눌러 보세요.<br>
       <b>4.</b> 실제 신청할 때는 앱을 미리 열어 두고, 연습과 같은 자세로 누르는 게 제일 중요해요.
     </p>
   </details>
@@ -633,24 +633,52 @@
       if(ac.state === "suspended") ac.resume();
     }catch(e){}
   }
-  function beep(freq, dur, vol, type){
-    if(!state.sound || !ac) return;
+  function beepAt(t, freq, dur, vol, type){
+    if(!state.sound || !ac) return null;
     try{
       const o = ac.createOscillator();
       const g = ac.createGain();
       o.type = type || "sine";
       o.frequency.value = freq;
-      const t = ac.currentTime;
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(vol || 0.16, t + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.09));
       o.connect(g); g.connect(ac.destination);
       o.start(t); o.stop(t + (dur || 0.09) + 0.02);
-    }catch(e){}
+      return o;
+    }catch(e){ return null; }
+  }
+  function beep(freq, dur, vol, type){
+    if(!state.sound || !ac) return;
+    beepAt(ac.currentTime, freq, dur, vol, type);
+  }
+
+  /* 5 · 4 · 3 · 2 · 1 매초 신호음 + 0.000 정각음 — 오디오 시계에 미리 예약해 박자를 정확히 */
+  function scheduleTicks(){
+    stopTicks();
+    if(!state.sound || !ac) return;
+    const base = ac.currentTime;
+    for(let k = 5; k >= 1; k--){
+      const o = beepAt(base + (5 - k), k === 1 ? 980 : 720, k === 1 ? 0.07 : 0.05, k === 1 ? 0.16 : 0.13, "square");
+      if(o) game.ticks.push(o);
+    }
+    const z = beepAt(base + 5, 560, 0.14, 0.17, "triangle");
+    if(z) game.ticks.push(z);
+  }
+  function stopTicks(){
+    if(!game || !game.ticks) return;
+    for(let i = 0; i < game.ticks.length; i++){ try{ game.ticks[i].stop(); }catch(e){} }
+    game.ticks.length = 0;
   }
 
   /* ───────── 게임 ───────── */
-  const game = { phase: "idle", target: 0, startAt: 0, lead: 0, lastTickSec: null, rafId: 0, fadeTimer: 0 };
+  const COUNT_MS = 5000;   // 시작하면 곧바로 5.000초 카운트다운
+  const game = { phase: "idle", target: 0, startAt: 0, lead: 0, rafId: 0, ticks: [] };
+
+  function fmtRemain(ms){
+    const v = Math.max(0, ms);
+    return Math.floor(v / 1000) + "." + pad(Math.floor(v % 1000), 3);
+  }
 
   function setResult(text, cls, sub){
     el.result.className = "result" + (cls ? " " + cls : "");
@@ -659,74 +687,55 @@
 
   function startRound(){
     ensureAudio();
-    const lead = currentLead();
-    const srv = epochNow() - lead;
-    let nb = Math.ceil(srv / 60000) * 60000;
-    let startSrv = nb - 5000;
-    if(startSrv - srv < 2200){ nb += 60000; startSrv = nb - 5000; }
+    stopTicks();
+    cancelAnimationFrame(game.rafId);
 
-    game.phase = "prep";
-    game.target = nb;
-    game.startAt = startSrv;
+    const lead = currentLead();
+    const srv = epochNow() - lead;   // 보정된 서버 시각 기준(폰 오차 + 미세조정 반영)
+
+    game.phase = "run";
     game.lead = lead;
-    game.lastTickSec = null;
+    game.startAt = srv;
+    game.target = srv + COUNT_MS;    // 화면 0.000 = 이 순간 · 판정도 같은 기준
+    game.ticks = [];
 
     el.startBtn.disabled = true;
-    el.startBtn.textContent = "카운트 준비 중…";
-    el.hitBtn.disabled = true;
-    setResult("준비!", "", "55.000초부터 카운트가 시작돼요. 손가락을 버튼 위에 올려 두세요.");
-    loop();
+    el.startBtn.textContent = "카운트 중…";
+    el.hitBtn.disabled = false;
+    el.stTime.classList.remove("hidden");
+    el.stTime.textContent = fmtRemain(COUNT_MS);
+    el.stHint.textContent = state.mode === "hide"
+      ? "마지막 0.5초는 숫자를 가려요 · 신호음 리듬으로 눌러요"
+      : "5 · 4 · 3 · 2 · 1 이 지나면 0.000초예요";
+    el.barFill.style.width = "0%";
+    setResult("5초 카운트 시작!", "", "손가락을 버튼 위에 올려 두세요.");
+
+    scheduleTicks();
+    game.rafId = requestAnimationFrame(loop);
   }
 
   function loop(){
-    if(game.phase === "idle" || game.phase === "done") return;
+    if(game.phase !== "run") return;
     const srv = epochNow() - game.lead;
-    const nb = game.target;
+    const remain = game.target - srv;     // 0.000까지 남은 시간
+    const passed = -remain;               // 정각 이후 경과
 
-    if(srv < game.startAt){
-      const left = (game.startAt - srv) / 1000;
-      el.stHead.textContent = "카운트 시작까지";
-      el.stTime.classList.remove("hidden");
-      el.stTime.textContent = left.toFixed(1) + "초";
-      el.stHint.textContent = "곧 " + fmtSec(nb - 5000) + "초부터 시작해요";
-      el.barFill.style.width = "0%";
-      game.rafId = requestAnimationFrame(loop);
-      return;
-    }
+    // 가리고 연습: 마지막 0.5초(0.500 → 0.000)만 숫자를 가림
+    const hideNow = state.mode === "hide" && remain <= 500;
 
-    if(game.phase === "prep"){
-      game.phase = "run";
-      el.hitBtn.disabled = false;
-      el.stHint.textContent = state.mode === "hide"
-        ? "59.500초부터 숫자를 가려요 · 신호음 리듬으로 눌러요"
-        : "정각 00.000초에 맞춰 눌러요";
-    }
-
-    const passed = srv - nb;              // 정각 이후 경과
-    const secShown = fmtSec(srv);
-    const hideNow = state.mode === "hide" && passed > -500;
-
-    el.stHead.textContent = passed > 0 ? "정각 지남" : "카운트";
-    el.stTime.textContent = hideNow ? "•••" : secShown;
+    el.stHead.textContent = passed >= 0 ? "정각 지남" : "카운트";
+    el.stTime.textContent = hideNow ? "•••" : fmtRemain(remain);
     el.stTime.classList.toggle("hidden", hideNow);
-    el.barFill.style.width = Math.min(100, Math.max(0, ((srv - game.startAt) / 5000) * 100)).toFixed(1) + "%";
+    el.barFill.style.width = Math.min(100, Math.max(0, ((COUNT_MS - remain) / COUNT_MS) * 100)).toFixed(1) + "%";
 
-    // 매초 신호음 (55~59초) 및 정각 표시음
-    const wholeSec = Math.floor(secOfMinute(srv) / 1000);
-    if(game.lastTickSec !== wholeSec){
-      game.lastTickSec = wholeSec;
-      if(wholeSec >= 55 && wholeSec <= 58) beep(720, 0.05, 0.13, "square");
-      else if(wholeSec === 59) beep(980, 0.07, 0.15, "square");
-      else if(wholeSec === 0 && passed >= 0) beep(520, 0.12, 0.14, "triangle");
-    }
-
-    if(passed > 2500 && game.phase === "run"){
+    if(passed > 2500){
       game.phase = "done";
+      stopTicks();
       el.hitBtn.disabled = true;
       el.startBtn.disabled = false;
       el.startBtn.textContent = "다시 시작하기";
       el.stHead.textContent = "놓쳤어요";
-      setResult("시간 초과", "bad", "정각을 " + (passed / 1000).toFixed(1) + "초 지나버렸어요. 다시 도전!");
+      setResult("시간 초과", "bad", "0.000초를 " + (passed / 1000).toFixed(1) + "초 지나버렸어요. 다시 도전!");
       return;
     }
 
@@ -748,6 +757,7 @@
     }
 
     game.phase = "done";
+    stopTicks();
     cancelAnimationFrame(game.rafId);
     el.hitBtn.disabled = true;
     el.startBtn.disabled = false;
@@ -771,10 +781,10 @@
     }
     setResult(head, ok ? "ok" : (near ? "near" : "bad"), sub);
 
-    el.stHead.textContent = ok ? "성공" : "실패";
-    el.stTime.textContent = fmtSec(srv);
+    el.stHead.textContent = ok ? "성공" : (near ? "아깝다" : "실패");
+    el.stTime.textContent = (d > 0 ? "+" : d < 0 ? "-" : "") + fmtRemain(Math.abs(d));
     el.stTime.classList.remove("hidden");
-    el.stHint.textContent = "다시 시작하면 다음 정각에 도전해요";
+    el.stHint.textContent = "다시 시작하면 바로 5초 카운트로 이어져요";
 
     if(navigator.vibrate) { try{ navigator.vibrate(ok ? [18, 40, 18] : 55); }catch(e){} }
 
@@ -903,7 +913,7 @@
   requestAnimationFrame(tickTop);
 
   // 테스트용 훅 (개인정보 없음 · 화면에는 노출되지 않음)
-  window.__sanyok = { state: state, pressHit: pressHit, game: game, currentLead: currentLead, epochNow: epochNow };
+  window.__sanyok = { state: state, pressHit: pressHit, startRound: startRound, game: game, currentLead: currentLead, epochNow: epochNow, fmtRemain: fmtRemain };
 })();
 </script>
 </body>
