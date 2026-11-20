@@ -630,6 +630,17 @@
   /* ───────── 자동 측정 ───────── */
   const SOURCES = [
     {
+      // 아카마이 에지 서버 시간(한국에 가까운 노드, 밀리초 단위, CORS 허용) — 가장 먼저 시도
+      name: "Akamai time",
+      url: "https://time.akamai.com/?ms",
+      parse: function(txt){
+        const v = parseFloat(String(txt).trim());
+        if(!isFinite(v) || v < 1000000000) throw new Error("bad ts");
+        return Math.round(v * 1000);
+      },
+      extraUnc: 0
+    },
+    {
       name: "timeapi.io",
       url: "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
       parse: function(txt){
