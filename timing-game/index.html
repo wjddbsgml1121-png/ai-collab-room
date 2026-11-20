@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0d0e14">
+<title>사녹 신청 타이밍 연습</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8F%B1%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0d0e14; --card:#171926; --card2:#1f2233; --line:#2b2f45;
+    --txt:#eef0f8; --muted:#9aa0bd; --accent:#ff5c8a; --accent2:#7c5cff;
+    --ok:#38d39f; --bad:#ff6b6b; --warn:#ffc861;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--txt)}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",Roboto,"Helvetica Neue",sans-serif;
+    line-height:1.5; -webkit-text-size-adjust:100%;
+    padding:14px 14px calc(28px + env(safe-area-inset-bottom));
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+  }
+  .wrap{max-width:520px; margin:0 auto}
+  header{padding:6px 2px 14px; text-align:center}
+  h1{margin:0; font-size:21px; letter-spacing:-.4px}
+  header p{margin:5px 0 0; font-size:12.5px; color:var(--muted)}
+  .card{
+    background:linear-gradient(180deg,var(--card),#141623);
+    border:1px solid var(--line); border-radius:18px; padding:15px;
+    margin-bottom:12px; box-shadow:0 8px 24px rgba(0,0,0,.25);
+  }
+  h2{
+    margin:0 0 11px; font-size:13px; font-weight:700; color:var(--muted);
+    letter-spacing:.4px; display:flex; align-items:center; gap:7px;
+  }
+  h2 .num{
+    display:inline-flex; width:19px; height:19px; border-radius:7px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#fff; font-size:11px; align-items:center; justify-content:center; font-weight:800;
+  }
+  .muted{color:var(--muted)}
+  .mono{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+
+  /* ── 실시간 시계 ── */
+  .goal-row{display:flex; justify-content:space-between; align-items:baseline; font-size:12.5px; color:var(--muted)}
+  .goal-row b{color:var(--txt)}
+  .device-clock{
+    margin:6px 0 2px; text-align:center; font-size:clamp(38px,13.5vw,52px); font-weight:800;
+    letter-spacing:-1.5px; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1;
+    color:#fff;
+  }
+  .srv-clock{text-align:center; font-size:12.5px; color:var(--muted); margin-bottom:8px; font-variant-numeric:tabular-nums}
+  .next-target{
+    display:flex; justify-content:space-between; gap:8px; font-size:12.5px;
+    border-top:1px dashed var(--line); padding-top:9px; margin-top:4px; color:var(--muted);
+  }
+  .next-target b{color:var(--accent); font-variant-numeric:tabular-nums}
+
+  /* ── 컨트롤 ── */
+  .seg{display:flex; gap:6px; background:#0f111b; border:1px solid var(--line); border-radius:12px; padding:4px; margin-bottom:10px}
+  .seg button{
+    flex:1; min-width:0; border:0; background:transparent; color:var(--muted);
+    font-size:13px; font-weight:700; padding:9px 4px; border-radius:9px;
+    font-family:inherit; cursor:pointer; transition:.15s; white-space:nowrap;
+  }
+  .seg button.on{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; box-shadow:0 3px 12px rgba(255,92,138,.28)}
+  .btn{
+    display:block; width:100%; border:0; border-radius:13px; padding:13px;
+    font-size:15px; font-weight:800; font-family:inherit; cursor:pointer; color:#fff;
+    background:var(--card2); border:1px solid var(--line); transition:.15s;
+  }
+  .btn.primary{background:linear-gradient(135deg,#3a4bd8,#7c5cff); border:0; box-shadow:0 6px 18px rgba(124,92,255,.3)}
+  .btn.ghost{background:transparent; color:var(--muted); border:1px solid var(--line); font-size:13px; padding:11px; font-weight:700}
+  .btn:disabled{opacity:.5}
+  .btn.busy{background:linear-gradient(135deg,#4a4f77,#5b5f8a); border:0}
+  .out{
+    font-size:12.5px; margin:9px 0 0; padding:10px 12px; border-radius:11px;
+    background:#0f111b; border:1px solid var(--line); line-height:1.45;
+  }
+  .out.good{border-color:rgba(56,211,159,.5); background:rgba(56,211,159,.07)}
+  .out.err{border-color:rgba(255,107,107,.5); background:rgba(255,107,107,.07)}
+  .out b{color:#fff}
+  .field{display:flex; align-items:center; gap:10px; margin-top:12px}
+  .field label{font-size:12.5px; color:var(--muted); flex:1; line-height:1.35}
+  .field input{
+    width:104px; text-align:right; font-size:16px; font-weight:800; font-variant-numeric:tabular-nums;
+    background:#0f111b; border:1px solid var(--line); color:#fff; border-radius:10px; padding:10px 12px;
+    font-family:inherit;
+  }
+  .presets{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+  .presets button{
+    flex:1; min-width:64px; font-size:12px; font-weight:700; font-family:inherit;
+    background:#0f111b; color:var(--muted); border:1px solid var(--line);
+    border-radius:10px; padding:8px 4px; cursor:pointer;
+  }
+  .presets button.on{color:#fff; border-color:var(--accent); background:rgba(255,92,138,.14)}
+  .verdict{
+    margin-top:13px; padding:14px; border-radius:14px; text-align:center;
+    background:radial-gradient(120% 120% at 50% 0%,rgba(255,92,138,.16),rgba(124,92,255,.08));
+    border:1px solid rgba(255,92,138,.35);
+  }
+  .verdict .v-main{font-size:18px; font-weight:900; color:#fff; letter-spacing:-.3px}
+  .verdict .v-sub{font-size:12.5px; color:#ffd0de; margin-top:4px; font-variant-numeric:tabular-nums}
+  .verdict .v-note{font-size:11.5px; color:var(--muted); margin-top:7px}
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .switch{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-size:13px; font-weight:700; padding:11px 13px; border-radius:12px;
+    background:#0f111b; border:1px solid var(--line); margin-bottom:10px; cursor:pointer;
+  }
+  .switch input{appearance:none; -webkit-appearance:none; width:46px; height:27px; border-radius:99px;
+    background:#333a55; position:relative; transition:.2s; margin:0; cursor:pointer}
+  .switch input:checked{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .switch input::after{content:""; position:absolute; top:3px; left:3px; width:21px; height:21px;
+    border-radius:50%; background:#fff; transition:.2s}
+  .switch input:checked::after{left:22px}
+
+  /* ── 게임 ── */
+  .stage{
+    border-radius:16px; background:#0b0c14; border:1px solid var(--line);
+    padding:16px 14px; text-align:center; margin-bottom:10px; position:relative; overflow:hidden;
+  }
+  .stage .st-head{font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.3px}
+  .stage .st-time{
+    font-size:clamp(46px,17vw,68px); font-weight:900; letter-spacing:-3px; line-height:1.1;
+    font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; color:#fff; margin:4px 0 2px;
+  }
+  .stage.hidden-mode .st-time.hidden{color:#3b4160}
+  .stage .st-hint{font-size:12px; color:var(--muted); min-height:18px}
+  .bar{height:7px; border-radius:99px; background:#1b1f30; overflow:hidden; margin:11px 0 0}
+  .bar i{display:block; height:100%; width:0%; border-radius:99px;
+    background:linear-gradient(90deg,#3a4bd8,#7c5cff,#ff5c8a); transition:width .07s linear}
+  .hit{
+    height:min(30vh,190px); min-height:130px; font-size:22px; letter-spacing:1px;
+    background:linear-gradient(160deg,#ff5c8a,#c5347a); box-shadow:0 10px 30px rgba(255,92,138,.3);
+    border:0;
+  }
+  .hit:active{transform:scale(.985); filter:brightness(1.12)}
+  .hit:disabled{background:#202335; color:#565d80; box-shadow:none; opacity:1}
+  .result{
+    margin-top:11px; text-align:center; border-radius:14px; padding:13px;
+    background:#0f111b; border:1px solid var(--line); font-size:13px; color:var(--muted);
+    min-height:52px; display:flex; flex-direction:column; justify-content:center; gap:2px;
+  }
+  .result .r-big{font-size:23px; font-weight:900; letter-spacing:-.5px; font-variant-numeric:tabular-nums}
+  .result.ok{border-color:rgba(56,211,159,.5); background:rgba(56,211,159,.08)}
+  .result.ok .r-big{color:var(--ok)}
+  .result.bad{border-color:rgba(255,107,107,.45); background:rgba(255,107,107,.07)}
+  .result.bad .r-big{color:var(--bad)}
+  .result.near{border-color:rgba(255,200,97,.45); background:rgba(255,200,97,.07)}
+  .result.near .r-big{color:var(--warn)}
+
+  /* ── 기록 ── */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-bottom:11px}
+  .stats div{background:#0f111b; border:1px solid var(--line); border-radius:12px; padding:9px 4px; text-align:center}
+  .stats b{display:block; font-size:16px; font-variant-numeric:tabular-nums; color:#fff; letter-spacing:-.5px}
+  .stats span{font-size:10.5px; color:var(--muted)}
+  .rank-line{font-size:12.5px; color:var(--muted); margin-bottom:8px; padding:9px 11px;
+    border-radius:10px; background:#0f111b; border:1px dashed var(--line)}
+  .rank-line b{color:var(--accent)}
+  ul.rec{list-style:none; margin:0; padding:0; max-height:280px; overflow:auto; -webkit-overflow-scrolling:touch}
+  ul.rec li{
+    display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:10px;
+    background:#0f111b; border:1px solid var(--line); margin-bottom:6px; font-size:12.5px;
+  }
+  ul.rec li .rk{width:26px; flex:none; font-size:11px; font-weight:800; color:var(--muted); text-align:center}
+  ul.rec li .dt{flex:1; font-weight:800; font-variant-numeric:tabular-nums; color:#fff}
+  ul.rec li .dt small{display:block; font-weight:500; color:var(--muted); font-size:10.5px; letter-spacing:0}
+  ul.rec li .tag{font-size:10.5px; font-weight:800; padding:3px 7px; border-radius:7px; flex:none}
+  ul.rec li .tag.ok{background:rgba(56,211,159,.16); color:var(--ok)}
+  ul.rec li .tag.bad{background:rgba(255,107,107,.14); color:var(--bad)}
+  ul.rec li.best{border-color:rgba(255,200,97,.5)}
+  .empty{font-size:12.5px; color:var(--muted); text-align:center; padding:16px 0}
+  details{margin-top:4px}
+  details summary{font-size:12.5px; color:var(--muted); cursor:pointer; padding:6px 2px}
+  details p{font-size:12.5px; color:var(--muted); margin:6px 2px 0; line-height:1.6}
+  details b{color:#dfe2f2}
+  .foot{text-align:center; font-size:11px; color:#5d6484; margin-top:14px; line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⏱️ 사녹 타이밍 연습</h1>
+    <p>서버 정각 00초 000밀리초에 손가락을 맞춰 보세요</p>
+  </header>
+
+  <!-- 실시간 시계 -->
+  <section class="card">
+    <div class="goal-row">
+      <span>목표 <b>서버 정각 00.000</b></span>
+      <span id="syncState" class="muted">보정 전</span>
+    </div>
+    <div class="device-clock mono" id="deviceClock">--:--:--.---</div>
+    <div class="srv-clock" id="srvClock">서버 시각 --:--:--.---</div>
+    <div class="next-target">
+      <span>다음 목표 정각</span>
+      <span><b id="nextTarget">--:--:00.000</b> <span id="nextLeft">· --초 남음</span></span>
+    </div>
+  </section>
+
+  <!-- 서버 시간 -->
+  <section class="card">
+    <h2><span class="num">1</span> 서버 시간 맞추기</h2>
+    <div class="seg" id="serverSeg">
+      <button data-server="fans" class="on">팬즈 (FANS)</button>
+      <button data-server="weverse">위버스 (Weverse)</button>
+      <button data-server="custom">직접 설정</button>
+    </div>
+    <button class="btn primary" id="measureBtn">📶 내 기기 오차 자동 측정</button>
+    <div class="out" id="measureOut">아직 측정 전이에요. 버튼을 누르면 내 폰 시계가 표준시보다 얼마나 빠르거나 느린지 재요.</div>
+
+    <div class="field">
+      <label for="manual">오차 미세조정 (ms)<br><span style="font-size:11px">음수 = 더 빠르게 누르기</span></label>
+      <input id="manual" type="number" inputmode="numeric" step="1" value="0">
+    </div>
+    <div class="presets" id="presets">
+      <button data-manual="-130">-130ms</button>
+      <button data-manual="-50">-50ms</button>
+      <button data-manual="0" class="on">0ms</button>
+      <button data-manual="50">+50ms</button>
+    </div>
+
+    <div class="verdict" id="verdict">
+      <div class="v-main" id="vMain">정각 00.000초에 누르기</div>
+      <div class="v-sub" id="vSub">내 폰 시계 60.000초</div>
+      <div class="v-note" id="vNote">팬즈 · 폰 오차 0ms(측정 전) · 미세조정 0ms</div>
+    </div>
+  </section>
+
+  <!-- 게임 -->
+  <section class="card">
+    <h2><span class="num">2</span> 타이밍 연습</h2>
+    <div class="seg" id="modeSeg">
+      <button data-mode="show" class="on">보면서 연습</button>
+      <button data-mode="hide">가리고 연습</button>
+    </div>
+    <div class="seg" id="rangeSeg">
+      <button data-range="20">±20ms</button>
+      <button data-range="10" class="on">±10ms</button>
+      <button data-range="5">±5ms</button>
+    </div>
+    <label class="switch">🔊 소리 신호
+      <input type="checkbox" id="sound" checked>
+    </label>
+
+    <div class="stage" id="stage">
+      <div class="st-head" id="stHead">시작 전</div>
+      <div class="st-time mono" id="stTime">--.---</div>
+      <div class="st-hint" id="stHint">시작하기를 누르면 55.000초부터 카운트해요</div>
+      <div class="bar"><i id="barFill"></i></div>
+    </div>
+
+    <button class="btn primary" id="startBtn">시작하기</button>
+    <div style="height:9px"></div>
+    <button class="btn hit" id="hitBtn" disabled>여기를 눌러!</button>
+
+    <div class="result" id="result">
+      <div class="muted">연습 기록이 여기에 표시돼요</div>
+    </div>
+  </section>
+
+  <!-- 기록 -->
+  <section class="card">
+    <h2><span class="num">3</span> 내 기록</h2>
+    <div class="stats">
+      <div><b id="stAttempts">0</b><span>시도</span></div>
+      <div><b id="stSuccess">0</b><span>성공</span></div>
+      <div><b id="stBest">-</b><span>최근접</span></div>
+      <div><b id="stAvg">-</b><span>평균 오차</span></div>
+    </div>
+    <div class="rank-line" id="rankLine">기록이 쌓이면 내 순위가 나와요</div>
+    <ul class="rec" id="recList"></ul>
+    <div style="height:9px"></div>
+    <button class="btn ghost" id="resetBtn">기록 초기화</button>
+  </section>
+
+  <details>
+    <summary>잘 맞히는 팁 보기</summary>
+    <p>
+      <b>1.</b> 폰 시계는 저절로 조금씩 틀어져요. 연습 시작 전에 <b>자동 측정</b>을 한 번 눌러 주세요.<br>
+      <b>2.</b> 기록이 3개 이상 쌓였는데 평균이 계속 한쪽으로 쏠리면, 그만큼 <b>미세조정</b>으로 밀어 주면 돼요.<br>
+      <b>3.</b> 가리고 연습은 59.500초부터 숫자를 가려요. 신호음을 리듬 삼아 눈을 감고 눌러 보세요.<br>
+      <b>4.</b> 실제 신청할 때는 앱을 미리 열어 두고, 연습과 같은 자세로 누르는 게 제일 중요해요.
+    </p>
+  </details>
+
+  <div class="foot">내 기록은 이 기기 브라우저에만 저장돼요 · 새로고침해도 그대로</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ───────── 저장소 & 상태 ───────── */
+  const KEY = "sanyok_timing_v1";
+  const SERVER_LABEL = { fans: "팬즈", weverse: "위버스", custom: "직접 설정" };
+
+  const state = {
+    server: "fans",
+    serverOffset: 0,      // 서버 시계 - 표준시 (ms)
+    deviceOffset: null,   // 내 폰 시계 - 표준시 (ms), 양수면 폰이 빠름
+    deviceUnc: null,      // 추정 오차 (±ms)
+    measuredBy: "",
+    measuredAt: 0,
+    manual: 0,            // 미세조정: 음수면 더 빠르게(먼저) 누르기
+    mode: "show",
+    range: 10,
+    sound: true,
+    records: []
+  };
+
+  // 실측 참고치 (2026-11-20, HTTP Date 헤더 비교): 팬즈·위버스 모두 표준시와 ±0.1초 이내
+  const SERVER_PRESET_OFFSET = { fans: 0, weverse: 0, custom: 0 };
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      const s = JSON.parse(raw);
+      if(!s || typeof s !== "object") return;
+      for(const k of ["server","serverOffset","deviceOffset","deviceUnc","measuredBy","measuredAt","manual","mode","range","sound"]){
+        if(s[k] !== undefined && s[k] !== null) state[k] = s[k];
+      }
+      if(Array.isArray(s.records)) state.records = s.records.slice(0, 200);
+    }catch(e){}
+  }
+  function save(){
+    try{
+      localStorage.setItem(KEY, JSON.stringify({
+        server: state.server, serverOffset: state.serverOffset,
+        deviceOffset: state.deviceOffset, deviceUnc: state.deviceUnc,
+        measuredBy: state.measuredBy, measuredAt: state.measuredAt,
+        manual: state.manual, mode: state.mode, range: state.range,
+        sound: state.sound, records: state.records
+      }));
+    }catch(e){}
+  }
+
+  /* ───────── 시계 ───────── */
+  let baseDate = Date.now(), basePerf = performance.now();
+  function epochNow(){ return baseDate + (performance.now() - basePerf); }
+  setInterval(function(){ baseDate = Date.now(); basePerf = performance.now(); }, 2000);
+
+  const pad = (n, w) => String(Math.floor(Math.abs(n))).padStart(w || 2, "0");
+
+  function fmtClock(ms){
+    const d = new Date(ms);
+    return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+  }
+  function fmtHM(ms){
+    const d = new Date(ms);
+    return pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function secOfMinute(ms){
+    return ((ms % 60000) + 60000) % 60000;
+  }
+  function fmtSec(ms){
+    const v = secOfMinute(ms);
+    return pad(Math.floor(v / 1000)) + "." + pad(v % 1000, 3);
+  }
+
+  /* ───────── 보정 계산 ───────── */
+  function currentLead(){
+    // 정각보다 몇 ms 먼저 눌러야 하는지 (양수 = 먼저, 음수 = 늦게)
+    return (state.deviceOffset || 0) - (state.serverOffset || 0) - (state.manual || 0);
+  }
+  function serverNow(){ return epochNow() - currentLead(); }
+
+  /* ───────── DOM ───────── */
+  const $ = id => document.getElementById(id);
+  const el = {
+    deviceClock: $("deviceClock"), srvClock: $("srvClock"), nextTarget: $("nextTarget"),
+    nextLeft: $("nextLeft"), syncState: $("syncState"),
+    measureBtn: $("measureBtn"), measureOut: $("measureOut"), manual: $("manual"),
+    presets: $("presets"), serverSeg: $("serverSeg"), modeSeg: $("modeSeg"), rangeSeg: $("rangeSeg"),
+    vMain: $("vMain"), vSub: $("vSub"), vNote: $("vNote"),
+    sound: $("sound"), stage: $("stage"), stHead: $("stHead"), stTime: $("stTime"),
+    stHint: $("stHint"), barFill: $("barFill"),
+    startBtn: $("startBtn"), hitBtn: $("hitBtn"), result: $("result"),
+    stAttempts: $("stAttempts"), stSuccess: $("stSuccess"), stBest: $("stBest"), stAvg: $("stAvg"),
+    rankLine: $("rankLine"), recList: $("recList"), resetBtn: $("resetBtn")
+  };
+
+  /* ───────── 상단 시계 갱신 ───────── */
+  function tickTop(){
+    const dev = epochNow();
+    const lead = currentLead();
+    const srv = dev - lead;
+    el.deviceClock.textContent = fmtClock(dev);
+    el.srvClock.textContent = "서버 시각 " + fmtClock(srv);
+
+    const toBoundary = 60000 - secOfMinute(srv);
+    const nb = srv + toBoundary;
+    el.nextTarget.textContent = fmtHM(nb) + ":00.000";
+    el.nextLeft.textContent = "· " + (toBoundary / 1000).toFixed(1) + "초 남음";
+
+    if(state.deviceOffset === null){
+      el.syncState.textContent = "측정 전";
+    }else{
+      const o = Math.round(state.deviceOffset);
+      el.syncState.textContent = "폰 " + (o >= 0 ? "+" : "") + o + "ms" + (state.manual ? " · 조정 " + (-state.manual > 0 ? "+" : "") + (-state.manual) + "ms" : "");
+    }
+    requestAnimationFrame(tickTop);
+  }
+
+  /* ───────── 서버 선택 / 미세조정 / UI 반영 ───────── */
+  function renderServerSeg(){
+    Array.prototype.forEach.call(el.serverSeg.querySelectorAll("button"), function(b){
+      b.classList.toggle("on", b.dataset.server === state.server);
+    });
+  }
+  function renderModeSeg(){
+    Array.prototype.forEach.call(el.modeSeg.querySelectorAll("button"), function(b){
+      b.classList.toggle("on", b.dataset.mode === state.mode);
+    });
+    Array.prototype.forEach.call(el.rangeSeg.querySelectorAll("button"), function(b){
+      b.classList.toggle("on", +b.dataset.range === state.range);
+    });
+    el.stage.classList.toggle("hidden-mode", state.mode === "hide");
+  }
+  function renderPresets(){
+    Array.prototype.forEach.call(el.presets.querySelectorAll("button"), function(b){
+      b.classList.toggle("on", +b.dataset.manual === +state.manual);
+    });
+  }
+
+  const MANUAL_STEPS = [-130, -50, 0, 50];
+
+  el.serverSeg.addEventListener("click", function(e){
+    const b = e.target.closest("button[data-server]");
+    if(!b) return;
+    state.server = b.dataset.server;
+    state.serverOffset = SERVER_PRESET_OFFSET[state.server] || 0;
+    renderServerSeg(); renderVerdict(); save();
+  });
+  el.modeSeg.addEventListener("click", function(e){
+    const b = e.target.closest("button[data-mode]");
+    if(!b) return;
+    state.mode = b.dataset.mode; renderModeSeg(); save();
+  });
+  el.rangeSeg.addEventListener("click", function(e){
+    const b = e.target.closest("button[data-range]");
+    if(!b) return;
+    state.range = +b.dataset.range; renderModeSeg(); save();
+  });
+  el.presets.addEventListener("click", function(e){
+    const b = e.target.closest("button[data-manual]");
+    if(!b) return;
+    state.manual = +b.dataset.manual;
+    el.manual.value = state.manual;
+    renderPresets(); renderVerdict(); save();
+  });
+  el.manual.addEventListener("input", function(){
+    const v = parseInt(el.manual.value, 10);
+    state.manual = isNaN(v) ? 0 : Math.max(-5000, Math.min(1000, v));
+    renderPresets(); renderVerdict(); save();
+  });
+  el.sound.addEventListener("change", function(){
+    state.sound = el.sound.checked; save();
+    if(state.sound) ensureAudio();
+  });
+
+  /* ───────── 보정 결과 문구 ───────── */
+  function renderVerdict(){
+    const lead = currentLead();
+    const abs = Math.abs(Math.round(lead));
+    if(!abs){
+      el.vMain.textContent = "정각 00.000초에 정확히 누르기";
+      el.vSub.textContent = "내 폰 시계 60.000초에 누르면 돼요";
+    }else if(lead > 0){
+      el.vMain.textContent = "정각보다 " + abs + "ms 먼저 누르기";
+      el.vSub.textContent = "내 폰 시계 " + fmtSec(60000 - abs) + "초에 누르기";
+    }else{
+      el.vMain.textContent = "정각보다 " + abs + "ms 늦게 누르기";
+      el.vSub.textContent = "내 폰 시계 " + fmtSec(60000 + abs) + "초에 누르기";
+    }
+    const dev = state.deviceOffset === null ? "측정 전" : ((state.deviceOffset >= 0 ? "+" : "") + Math.round(state.deviceOffset) + "ms");
+    const adj = (state.manual > 0 ? "+" : "") + state.manual + "ms";
+    el.vNote.textContent = SERVER_LABEL[state.server] + " · 폰 오차 " + dev + " · 미세조정 " + adj;
+  }
+
+  /* ───────── 자동 측정 ───────── */
+  const SOURCES = [
+    {
+      name: "timeapi.io",
+      url: "https://timeapi.io/api/Time/current/zone?timeZone=UTC",
+      parse: function(txt){
+        const j = JSON.parse(txt);
+        if(!j || typeof j.year !== "number") throw new Error("bad json");
+        return Date.UTC(j.year, j.month - 1, j.day, j.hour, j.minute, j.seconds) + (j.milliSeconds || 0);
+      },
+      extraUnc: 0
+    },
+    {
+      name: "Cloudflare",
+      url: "https://www.cloudflare.com/cdn-cgi/trace",
+      parse: function(txt){
+        const m = /^ts=([0-9.]+)$/m.exec(txt);
+        if(!m) throw new Error("no ts");
+        return Math.floor(parseFloat(m[1]) * 1000);
+      },
+      extraUnc: 500  // 초 단위 값이라 ±0.5초
+    },
+    {
+      name: "이 페이지 서버",
+      headerOnly: true,
+      url: function(){ return location.origin + location.pathname + "?ts=" + Date.now(); },
+      extraUnc: 500
+    }
+  ];
+
+  function sampleOnce(src){
+    const url = typeof src.url === "function" ? src.url() : src.url;
+    const t0 = epochNow();
+    const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    const timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 7000);
+    return fetch(url, ctrl ? { cache: "no-store", signal: ctrl.signal } : { cache: "no-store" })
+      .then(function(res){
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        if(src.headerOnly){
+          const t1 = epochNow();
+          clearTimeout(timer);
+          const d = res.headers.get("date");
+          if(!d) throw new Error("no date header");
+          return { serverMs: Date.parse(d) + 500, t0: t0, t1: t1 };
+        }
+        return res.text().then(function(txt){
+          const t1 = epochNow();
+          clearTimeout(timer);
+          return { serverMs: src.parse(txt), t0: t0, t1: t1 };
+        });
+      }, function(err){ clearTimeout(timer); throw err; });
+  }
+
+  function measureWith(src, tries){
+    let best = null;
+    let chain = Promise.resolve();
+    for(let i = 0; i < tries; i++){
+      chain = chain.then(function(){
+        return sampleOnce(src).then(function(r){
+          const rtt = r.t1 - r.t0;
+          const offset = r.serverMs - (r.t0 + r.t1) / 2;
+          if(!isFinite(offset) || Math.abs(offset) > 24 * 3600 * 1000) throw new Error("sanity");
+          if(!best || rtt < best.rtt) best = { offset: offset, rtt: rtt };
+        }, function(){ /* 한 번 실패는 넘어감 */ });
+      });
+    }
+    return chain.then(function(){ return best; });
+  }
+
+  let measuring = false;
+  el.measureBtn.addEventListener("click", function(){
+    if(measuring) return;
+    measuring = true;
+    el.measureBtn.disabled = true;
+    el.measureBtn.classList.add("busy");
+    el.measureBtn.textContent = "측정 중…";
+    el.measureOut.className = "out";
+    el.measureOut.textContent = "표준시 서버에 연결하는 중이에요…";
+
+    let idx = 0;
+    function next(){
+      if(idx >= SOURCES.length){
+        finish(null);
+        return;
+      }
+      const src = SOURCES[idx++];
+      measureWith(src, src.headerOnly ? 3 : 4).then(function(best){
+        if(best){ finish({ src: src, best: best }); }
+        else { next(); }
+      }, function(){ next(); });
+    }
+    function finish(hit){
+      measuring = false;
+      el.measureBtn.disabled = false;
+      el.measureBtn.classList.remove("busy");
+      el.measureBtn.textContent = "📶 내 기기 오차 자동 측정";
+      if(!hit){
+        el.measureOut.className = "out err";
+        el.measureOut.innerHTML = "자동 측정에 실패했어요. (네트워크·방화벽에서 시간 서버가 막힌 경우)<br>아래 <b>오차 미세조정</b>에 값을 직접 넣어도 게임은 그대로 돌아가요.";
+        return;
+      }
+      const off = Math.round(hit.best.offset);
+      const unc = Math.round(hit.best.rtt / 2 + (hit.src.extraUnc || 0));
+      state.deviceOffset = hit.best.offset;
+      state.deviceUnc = unc;
+      state.measuredBy = hit.src.name;
+      state.measuredAt = Date.now();
+      save();
+      const word = off > 0 ? "빠름" : (off < 0 ? "느림" : "정확");
+      el.measureOut.className = "out good";
+      el.measureOut.innerHTML =
+        "내 폰 시계는 표준시보다 <b>" + (off === 0 ? "0ms" : Math.abs(off) + "ms " + word) + "</b> " +
+        "(추정 오차 ±" + unc + "ms)<br>" +
+        "<span class='muted'>측정 방식: " + hit.src.name + " · 왕복 " + Math.round(hit.best.rtt) + "ms</span>";
+      renderVerdict();
+    }
+    next();
+  });
+
+  /* ───────── 소리 ───────── */
+  let ac = null;
+  function ensureAudio(){
+    try{
+      if(!ac){
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if(!Ctx) return;
+        ac = new Ctx();
+      }
+      if(ac.state === "suspended") ac.resume();
+    }catch(e){}
+  }
+  function beep(freq, dur, vol, type){
+    if(!state.sound || !ac) return;
+    try{
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = type || "sine";
+      o.frequency.value = freq;
+      const t = ac.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol || 0.16, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.09));
+      o.connect(g); g.connect(ac.destination);
+      o.start(t); o.stop(t + (dur || 0.09) + 0.02);
+    }catch(e){}
+  }
+
+  /* ───────── 게임 ───────── */
+  const game = { phase: "idle", target: 0, startAt: 0, lead: 0, lastTickSec: null, rafId: 0, fadeTimer: 0 };
+
+  function setResult(text, cls, sub){
+    el.result.className = "result" + (cls ? " " + cls : "");
+    el.result.innerHTML = '<div class="r-big">' + text + "</div>" + (sub ? '<div class="muted">' + sub + "</div>" : "");
+  }
+
+  function startRound(){
+    ensureAudio();
+    const lead = currentLead();
+    const srv = epochNow() - lead;
+    let nb = Math.ceil(srv / 60000) * 60000;
+    let startSrv = nb - 5000;
+    if(startSrv - srv < 2200){ nb += 60000; startSrv = nb - 5000; }
+
+    game.phase = "prep";
+    game.target = nb;
+    game.startAt = startSrv;
+    game.lead = lead;
+    game.lastTickSec = null;
+
+    el.startBtn.disabled = true;
+    el.startBtn.textContent = "카운트 준비 중…";
+    el.hitBtn.disabled = true;
+    setResult("준비!", "", "55.000초부터 카운트가 시작돼요. 손가락을 버튼 위에 올려 두세요.");
+    loop();
+  }
+
+  function loop(){
+    if(game.phase === "idle" || game.phase === "done") return;
+    const srv = epochNow() - game.lead;
+    const nb = game.target;
+
+    if(srv < game.startAt){
+      const left = (game.startAt - srv) / 1000;
+      el.stHead.textContent = "카운트 시작까지";
+      el.stTime.classList.remove("hidden");
+      el.stTime.textContent = left.toFixed(1) + "초";
+      el.stHint.textContent = "곧 " + fmtSec(nb - 5000) + "초부터 시작해요";
+      el.barFill.style.width = "0%";
+      game.rafId = requestAnimationFrame(loop);
+      return;
+    }
+
+    if(game.phase === "prep"){
+      game.phase = "run";
+      el.hitBtn.disabled = false;
+    }
+
+    const passed = srv - nb;              // 정각 이후 경과
+    const secShown = fmtSec(srv);
+    const hideNow = state.mode === "hide" && passed > -500;
+
+    el.stHead.textContent = passed > 0 ? "정각 지남" : "카운트";
+    el.stTime.textContent = hideNow ? "•••" : secShown;
+    el.stTime.classList.toggle("hidden", hideNow);
+    el.barFill.style.width = Math.min(100, Math.max(0, ((srv - game.startAt) / 5000) * 100)).toFixed(1) + "%";
+
+    // 매초 신호음 (55~59초) 및 정각 표시음
+    const wholeSec = Math.floor(secOfMinute(srv) / 1000);
+    if(game.lastTickSec !== wholeSec){
+      game.lastTickSec = wholeSec;
+      if(wholeSec >= 55 && wholeSec <= 58) beep(720, 0.05, 0.13, "square");
+      else if(wholeSec === 59) beep(980, 0.07, 0.15, "square");
+      else if(wholeSec === 0 && passed >= 0) beep(520, 0.12, 0.14, "triangle");
+    }
+
+    if(passed > 2500 && game.phase === "run"){
+      game.phase = "done";
+      el.hitBtn.disabled = true;
+      el.startBtn.disabled = false;
+      el.startBtn.textContent = "다시 시작하기";
+      el.stHead.textContent = "놓쳤어요";
+      setResult("시간 초과", "bad", "정각을 " + (passed / 1000).toFixed(1) + "초 지나버렸어요. 다시 도전!");
+      return;
+    }
+
+    game.rafId = requestAnimationFrame(loop);
+  }
+
+  function pressHit(){
+    if(game.phase !== "run") return;
+    const srv = epochNow() - game.lead;
+    const delta = srv - game.target;   // 양수 = 늦음, 음수 = 빠름
+
+    if(delta < -3000){
+      el.stHint.textContent = "아직이에요! " + Math.round(-delta) + "ms 남았어요";
+      return;
+    }
+    if(delta > 3000){
+      el.stHint.textContent = "이미 정각을 " + Math.round(delta) + "ms 지났어요";
+      return;
+    }
+
+    game.phase = "done";
+    cancelAnimationFrame(game.rafId);
+    el.hitBtn.disabled = true;
+    el.startBtn.disabled = false;
+    el.startBtn.textContent = "다시 시작하기";
+
+    const d = Math.round(delta);
+    const abs = Math.abs(d);
+    const ok = abs <= state.range;
+    const near = !ok && abs <= state.range * 3;
+
+    let head, sub;
+    if(ok){
+      head = (d < 0 ? "빠름 " : d > 0 ? "늦음 +" : "정확 ") + (d === 0 ? "0ms" : abs + "ms") + " ✅";
+      sub = "성공! ±" + state.range + "ms 안에 들어왔어요";
+      beep(1046, 0.09, 0.18, "sine");
+      setTimeout(function(){ beep(1318, 0.12, 0.16, "sine"); }, 90);
+    }else{
+      head = (d < 0 ? "빠름 " : "늦음 +") + abs + "ms " + (near ? "😣" : "❌");
+      sub = "아깝다! " + (d < 0 ? abs + "ms 더 늦게" : abs + "ms 더 빠르게") + " 누르면 성공이에요";
+      beep(near ? 330 : 180, near ? 0.14 : 0.22, 0.16, "sawtooth");
+    }
+    setResult(head, ok ? "ok" : (near ? "near" : "bad"), sub);
+
+    el.stHead.textContent = ok ? "성공" : "실패";
+    el.stTime.textContent = fmtSec(srv);
+    el.stTime.classList.remove("hidden");
+    el.stHint.textContent = "다시 시작하면 다음 정각에 도전해요";
+
+    if(navigator.vibrate) { try{ navigator.vibrate(ok ? [18, 40, 18] : 55); }catch(e){} }
+
+    addRecord(d, ok);
+  }
+
+  el.startBtn.addEventListener("click", startRound);
+  el.hitBtn.addEventListener("pointerdown", function(e){ e.preventDefault(); pressHit(); }, { passive: false });
+  el.hitBtn.addEventListener("keydown", function(e){ if(e.key === " " || e.key === "Enter"){ e.preventDefault(); pressHit(); } });
+
+  /* ───────── 기록 ───────── */
+  function recordKey(r){ return r.t + "|" + r.d; }
+  function addRecord(delta, ok){
+    const rec = { t: Date.now(), d: delta, ok: ok, range: state.range, mode: state.mode };
+    state.records.unshift(rec);
+    if(state.records.length > 200) state.records.length = 200;
+    save();
+    renderRecords(rec);
+  }
+
+  function sortedByAbs(){
+    return state.records
+      .map(function(r, i){ return { r: r, i: i, abs: Math.abs(r.d) }; })
+      .sort(function(a, b){ return a.abs - b.abs || (b.r.t - a.r.t); });
+  }
+
+  function renderRecords(lastRec){
+    const recs = state.records;
+    el.stAttempts.textContent = recs.length;
+    const succ = recs.filter(function(r){ return r.ok; }).length;
+    el.stSuccess.textContent = succ;
+
+    if(recs.length){
+      let best = recs[0];
+      for(let i = 1; i < recs.length; i++) if(Math.abs(recs[i].d) < Math.abs(best.d)) best = recs[i];
+      el.stBest.textContent = (best.d > 0 ? "+" : "") + best.d + "ms";
+      const avg = Math.round(recs.reduce(function(s, r){ return s + r.d; }, 0) / recs.length);
+      el.stAvg.textContent = (avg > 0 ? "+" : "") + avg + "ms";
+    }else{
+      el.stBest.textContent = "-";
+      el.stAvg.textContent = "-";
+    }
+
+    // 순위
+    const order = sortedByAbs();
+    if(!recs.length){
+      el.rankLine.textContent = "기록이 쌓이면 내 순위가 나와요";
+    }else if(lastRec && lastRec.t){
+      let rank = 0;
+      for(let i = 0; i < order.length; i++) if(order[i].r.t === lastRec.t){ rank = i + 1; break; }
+      const bestAbs = Math.abs(order[0].r.d);
+      el.rankLine.innerHTML = "이번 기록은 내 기록 <b>" + order.length + "개 중 " + rank + "위</b> · 최고 기록 <b>" + bestAbs + "ms</b>";
+      if(recs.length >= 3){
+        const avg = recs.slice(0, 10).reduce(function(s, r){ return s + r.d; }, 0) / Math.min(10, recs.length);
+        if(Math.abs(avg) >= 12){
+          el.rankLine.innerHTML += "<br>평균 " + (avg > 0 ? "+" : "") + Math.round(avg) + "ms " + (avg > 0 ? "늦어요" : "빨라요") +
+            " · 미세조정 <b>" + (avg > 0 ? "-" : "+") + Math.abs(Math.round(avg)) + "ms</b> 넣어 보세요";
+        }
+      }
+    }
+
+    // 리스트
+    if(!recs.length){
+      el.recList.innerHTML = '<div class="empty">아직 기록이 없어요</div>';
+      return;
+    }
+    const rankByIndex = {};
+    for(let i = 0; i < order.length; i++) rankByIndex[order[i].i] = i + 1;
+    const bestAbs = Math.abs(order[0].r.d);
+    let html = "";
+    const shown = recs.slice(0, 20);
+    for(let i = 0; i < shown.length; i++){
+      const r = shown[i];
+      const d = r.d;
+      const abs = Math.abs(d);
+      const t = new Date(r.t);
+      const timeStr = pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds());
+      const isBest = abs === bestAbs;
+      html += '<li class="' + (isBest ? "best" : "") + '">' +
+        '<span class="rk">' + (rankByIndex[i] || "-") + "위</span>" +
+        '<span class="dt">' + (d > 0 ? "+" : "") + d + "ms" +
+          "<small>" + timeStr + " · " + (r.mode === "hide" ? "가리고" : "보면서") + " · ±" + r.range + "ms</small></span>" +
+        '<span class="tag ' + (r.ok ? "ok" : "bad") + '">' + (r.ok ? "성공" : "실패") + "</span>" +
+      "</li>";
+    }
+    el.recList.innerHTML = html;
+  }
+
+  el.resetBtn.addEventListener("click", function(){
+    if(!state.records.length) return;
+    if(confirm("기록 " + state.records.length + "개를 모두 지울까요?")){
+      state.records = [];
+      save();
+      renderRecords(null);
+      setResult("기록을 지웠어요", "", "다시 차근차근 쌓아 봐요");
+    }
+  });
+
+  /* ───────── 초기화 ───────── */
+  load();
+  el.manual.value = state.manual;
+  el.sound.checked = !!state.sound;
+  renderServerSeg(); renderModeSeg(); renderPresets(); renderVerdict();
+  renderRecords(null);
+  if(state.deviceOffset !== null){
+    const o = Math.round(state.deviceOffset);
+    el.measureOut.className = "out";
+    el.measureOut.innerHTML = "저장된 측정값: 내 폰 시계 <b>" + (o >= 0 ? "+" : "") + o + "ms</b> (추정 ±" +
+      Math.round(state.deviceUnc || 0) + "ms · " + (state.measuredBy || "이전 측정") + ")<br><span class='muted'>다시 재고 싶으면 위 버튼을 눌러 주세요.</span>";
+  }
+  requestAnimationFrame(tickTop);
+
+  // 테스트용 훅 (개인정보 없음 · 화면에는 노출되지 않음)
+  window.__sanyok = { state: state, pressHit: pressHit, game: game, currentLead: currentLead, epochNow: epochNow };
+})();
+</script>
+</body>
+</html>
