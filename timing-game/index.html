@@ -159,6 +159,9 @@
   .rank-line{font-size:12.5px; color:var(--muted); margin-bottom:8px; padding:9px 11px;
     border-radius:10px; background:#0f111b; border:1px dashed var(--line)}
   .rank-line b{color:var(--accent)}
+  .fixbtn{display:inline-block; margin-left:6px; padding:5px 10px; border:0; border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-size:11.5px;
+    font-weight:800; font-family:inherit; cursor:pointer}
   ul.rec{list-style:none; margin:0; padding:0; max-height:280px; overflow:auto; -webkit-overflow-scrolling:touch}
   ul.rec li{
     display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:10px;
@@ -828,7 +831,8 @@
         const avg = recs.slice(0, 10).reduce(function(s, r){ return s + r.d; }, 0) / Math.min(10, recs.length);
         if(Math.abs(avg) >= 12){
           el.rankLine.innerHTML += "<br>평균 " + (avg > 0 ? "+" : "") + Math.round(avg) + "ms " + (avg > 0 ? "늦어요" : "빨라요") +
-            " · 미세조정 <b>" + (avg > 0 ? "-" : "+") + Math.abs(Math.round(avg)) + "ms</b> 넣어 보세요";
+            " · 미세조정 <b>" + (avg > 0 ? "-" : "+") + Math.abs(Math.round(avg)) + "ms</b> 넣어 보세요" +
+            '<button class="fixbtn" id="autoFixBtn" data-avg="' + Math.round(avg) + '">보정 적용</button>';
         }
       }
     }else if(order.length){
@@ -861,6 +865,18 @@
     }
     el.recList.innerHTML = html;
   }
+
+  el.rankLine.addEventListener("click", function(e){
+    const btn = e.target.closest("#autoFixBtn");
+    if(!btn) return;
+    const avg = +btn.dataset.avg;
+    state.manual = Math.max(-5000, Math.min(1000, Math.round(state.manual - avg)));
+    el.manual.value = state.manual;
+    state.records = [];
+    save();
+    renderPresets(); renderVerdict(); renderRecords(null);
+    setResult("보정 " + (avg > 0 ? "-" : "+") + Math.abs(avg) + "ms 적용", "ok", "기록은 새로 시작할게요. 이제 다시 재 봐요!");
+  });
 
   el.resetBtn.addEventListener("click", function(){
     if(!state.records.length) return;
