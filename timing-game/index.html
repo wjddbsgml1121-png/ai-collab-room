@@ -812,6 +812,8 @@
             " · 미세조정 <b>" + (avg > 0 ? "-" : "+") + Math.abs(Math.round(avg)) + "ms</b> 넣어 보세요";
         }
       }
+    }else if(order.length){
+      el.rankLine.innerHTML = "지금까지 <b>" + order.length + "개</b> · 최고 기록 <b>" + Math.abs(order[0].r.d) + "ms</b>";
     }
 
     // 리스트
