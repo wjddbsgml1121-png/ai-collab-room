@@ -141,8 +141,9 @@
     position:relative; height:26px; border-radius:9px; background:#10131d;
     border:1px solid #2a3048; box-shadow:inset 0 1px 3px rgba(0,0,0,.55);
   }
+  .g-axis{position:absolute; left:6px; right:6px; top:0; bottom:0}
   .g-fill{
-    position:absolute; left:0; top:0; bottom:0; width:0; border-radius:8px 2px 2px 8px;
+    position:absolute; left:0; top:0; bottom:0; width:0; border-radius:7px 2px 2px 7px;
     background:linear-gradient(90deg,rgba(58,75,216,.5),rgba(124,92,255,.78) 62%,rgba(255,92,138,.92));
   }
   .g-ticks{position:absolute; left:0; right:0; top:0; bottom:0; pointer-events:none}
@@ -163,8 +164,9 @@
   }
   .g-cursor{
     position:absolute; left:0; top:-5px; bottom:-5px; width:2px; margin-left:-1px; border-radius:2px;
-    background:#fff; box-shadow:0 0 8px rgba(255,255,255,.85); transition:opacity .12s;
+    background:#fff; box-shadow:0 0 8px rgba(255,255,255,.85); opacity:0; transition:opacity .12s;
   }
+  .gauge.live .g-cursor{opacity:1}
   .g-cursor::after{
     content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
     width:12px; height:12px; border-radius:50%; background:#fff;
@@ -329,13 +331,15 @@
         <div class="g-ruler" id="gRuler"></div>
         <div class="g-body">
           <div class="g-track" id="gTrack">
-            <div class="g-fill" id="gFill"></div>
-            <div class="g-ticks" id="gTicks"></div>
-            <div class="g-blind" id="gBlind"><span>•••</span></div>
-            <div class="g-zone" id="gZone"></div>
-            <div class="g-goal" id="gGoal"></div>
-            <div class="g-cursor" id="gCursor"></div>
-            <div class="g-pin" id="gPin"></div>
+            <div class="g-axis">
+              <div class="g-fill" id="gFill"></div>
+              <div class="g-ticks" id="gTicks"></div>
+              <div class="g-blind" id="gBlind"><span>•••</span></div>
+              <div class="g-zone" id="gZone"></div>
+              <div class="g-goal" id="gGoal"></div>
+              <div class="g-cursor" id="gCursor"></div>
+              <div class="g-pin" id="gPin"></div>
+            </div>
           </div>
           <div class="g-delta" id="gDelta"></div>
         </div>
@@ -397,6 +401,7 @@
     deviceUnc: null,      // 추정 오차 (±ms)
     measuredBy: "",
     measuredAt: 0,
+    signVer: 2,           // 측정 오차 부호 규칙 버전 (2 = 폰-표준시)
     manual: 0,            // 미세조정: 음수면 더 빠르게(먼저) 누르기
     mode: "show",
     range: 10,
@@ -416,6 +421,9 @@
       for(const k of ["server","serverOffset","deviceOffset","deviceUnc","measuredBy","measuredAt","manual","mode","range","sound"]){
         if(s[k] !== undefined && s[k] !== null) state[k] = s[k];
       }
+      // v1로 저장된 측정값은 부호가 반대(서버-폰)였음 → 새 기준(폰-서버)으로 한 번만 뒤집음
+      if(!s.signVer && typeof state.deviceOffset === "number") state.deviceOffset = -state.deviceOffset;
+      state.signVer = 2;
       if(Array.isArray(s.records)) state.records = s.records.slice(0, 200);
     }catch(e){}
   }
@@ -424,7 +432,7 @@
       localStorage.setItem(KEY, JSON.stringify({
         server: state.server, serverOffset: state.serverOffset,
         deviceOffset: state.deviceOffset, deviceUnc: state.deviceUnc,
-        measuredBy: state.measuredBy, measuredAt: state.measuredAt,
+        measuredBy: state.measuredBy, measuredAt: state.measuredAt, signVer: 2,
         manual: state.manual, mode: state.mode, range: state.range,
         sound: state.sound, records: state.records
       }));
@@ -454,10 +462,17 @@
     return pad(Math.floor(v / 1000)) + "." + pad(v % 1000, 3);
   }
 
-  /* ───────── 보정 계산 ───────── */
+  /* ───────── 보정 계산 ─────────
+     부호 기준(전부 하나로 통일)
+       deviceOffset = 내 폰 시계 - 표준시   (양수 = 폰이 빠름, 음수 = 폰이 느림)
+       serverOffset = 서버 시계 - 표준시
+       manual       = 미세조정 (음수 = 그만큼 더 빨리(일찍) 누르기)
+       lead         = 내 폰 시계의 00초 경계보다 누를 시점이 몇 ms 뒤인지
+                      양수 → 폰 시계 00.xxx초에 누르기 / 음수 → 폰 시계 59.xxx초에 누르기
+       서버 정각 00.000 순간의 폰 시계 = 60000 + lead (mod 60000)
+  ───────── */
   function currentLead(){
-    // 정각보다 몇 ms 먼저 눌러야 하는지 (양수 = 먼저, 음수 = 늦게)
-    return (state.deviceOffset || 0) - (state.serverOffset || 0) - (state.manual || 0);
+    return (state.deviceOffset || 0) - (state.serverOffset || 0) + (state.manual || 0);
   }
   function serverNow(){ return epochNow() - currentLead(); }
 
@@ -564,20 +579,22 @@
     if(state.sound) ensureAudio();
   });
 
-  /* ───────── 보정 결과 문구 ───────── */
+  /* ───────── 보정 결과 문구 ─────────
+     폰이 표준시보다 119ms 느리면(deviceOffset=-119) → 서버 정각 순간 폰 시계는 59.881초
+       → "정각보다 119ms 먼저 누르기 · 내 폰 시계 59.881초에 누르기"
+     폰이 119ms 빠르면(deviceOffset=+119) → 폰 시계 00.119초 → "119ms 늦게 · 00.119초"  */
   function renderVerdict(){
-    const lead = currentLead();
-    const abs = Math.abs(Math.round(lead));
+    const lead = Math.round(currentLead());
+    const abs = Math.abs(lead);
+    const pressSec = fmtSec(60000 + lead);   // 내 폰 시계로 눌러야 하는 초 (00.xxx 또는 59.xxx)
     if(!abs){
       el.vMain.textContent = "정각 00.000초에 정확히 누르기";
-      el.vSub.textContent = "내 폰 시계 60.000초에 누르면 돼요";
     }else if(lead > 0){
-      el.vMain.textContent = "정각보다 " + abs + "ms 먼저 누르기";
-      el.vSub.textContent = "내 폰 시계 " + fmtSec(60000 - abs) + "초에 누르기";
+      el.vMain.textContent = "정각(내 폰 00초)보다 " + abs + "ms 늦게 누르기";
     }else{
-      el.vMain.textContent = "정각보다 " + abs + "ms 늦게 누르기";
-      el.vSub.textContent = "내 폰 시계 " + fmtSec(60000 + abs) + "초에 누르기";
+      el.vMain.textContent = "정각(내 폰 00초)보다 " + abs + "ms 먼저 누르기";
     }
+    el.vSub.textContent = "내 폰 시계 " + pressSec + "초에 누르기";
     const dev = state.deviceOffset === null ? "측정 전" : ((state.deviceOffset >= 0 ? "+" : "") + Math.round(state.deviceOffset) + "ms");
     const adj = (state.manual > 0 ? "+" : "") + state.manual + "ms";
     el.vNote.textContent = SERVER_LABEL[state.server] + " · 폰 오차 " + dev + " · 미세조정 " + adj;
@@ -643,7 +660,8 @@
       chain = chain.then(function(){
         return sampleOnce(src).then(function(r){
           const rtt = r.t1 - r.t0;
-          const offset = r.serverMs - (r.t0 + r.t1) / 2;
+          // 내 폰 시계 - 표준시 (양수 = 폰이 빠름, 음수 = 폰이 느림)
+          const offset = (r.t0 + r.t1) / 2 - r.serverMs;
           if(!isFinite(offset) || Math.abs(offset) > 24 * 3600 * 1000) throw new Error("sanity");
           got.push({ offset: offset, rtt: rtt });
         }, function(){ /* 한 번 실패는 넘어감 */ });
@@ -828,6 +846,7 @@
 
   function resetGauge(){
     el.gauge.classList.remove("blind");
+    el.gauge.classList.add("live");
     el.gPin.className = "g-pin";
     el.gPin.style.left = "0%";
     el.gDelta.className = "g-delta";
@@ -841,6 +860,7 @@
   // 내가 누른 순간: 커서를 멈추고 그 자리에 핀을 콕 찍어 남김
   function markPin(d, ok, near){
     el.gauge.classList.remove("blind");
+    el.gauge.classList.remove("live");
     el.gCursor.classList.add("frozen");
     const over = d > GAUGE_AFTER;
     const px = over ? 100 : axisPct(d);
@@ -920,7 +940,9 @@
       el.startBtn.disabled = false;
       el.startBtn.textContent = "다시 시작하기";
       el.stHead.textContent = "놓쳤어요";
-      el.gauge.classList.remove("blind");
+      el.stTime.textContent = "+" + fmtRemain(delta);
+      el.stTime.classList.remove("hidden");
+      el.gauge.classList.remove("blind", "live");
       el.gCursor.classList.add("frozen");
       el.gPin.className = "g-pin on bad";
       el.gPin.style.left = "100%";
