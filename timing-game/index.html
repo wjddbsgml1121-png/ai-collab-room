@@ -669,13 +669,15 @@
     const base = ac.currentTime;                 // 오디오 시계의 '지금'
     const nowSrv = epochNow() - game.lead;       // 게임 시계의 '지금'
     for(let k = 5; k >= 1; k--){
-      const at = base + (game.target - k * 1000 - nowSrv) / 1000;
-      if(at < base) continue;                    // 이미 지난 박자는 건너뜀
+      let at = base + (game.target - k * 1000 - nowSrv) / 1000;
+      if(at < base - 0.05) continue;            // 한참 지난 박자만 건너뜀
+      if(at < base) at = base;                  // 첫 박자(5)는 바로 울림
       const o = beepAt(at, k === 1 ? 980 : 720, k === 1 ? 0.07 : 0.05, k === 1 ? 0.16 : 0.13, "square");
       if(o) game.ticks.push(o);
     }
-    const zAt = base + (game.target - nowSrv) / 1000;
-    if(zAt > base){
+    let zAt = base + (game.target - nowSrv) / 1000;
+    if(zAt >= base - 0.05){
+      if(zAt < base) zAt = base;
       const z = beepAt(zAt, 560, 0.14, 0.17, "triangle");
       if(z) game.ticks.push(z);
     }
