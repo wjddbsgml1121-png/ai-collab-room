@@ -542,7 +542,7 @@
   }
 
   function measureWith(src, tries){
-    let best = null;
+    const got = [];
     let chain = Promise.resolve();
     for(let i = 0; i < tries; i++){
       chain = chain.then(function(){
@@ -550,11 +550,22 @@
           const rtt = r.t1 - r.t0;
           const offset = r.serverMs - (r.t0 + r.t1) / 2;
           if(!isFinite(offset) || Math.abs(offset) > 24 * 3600 * 1000) throw new Error("sanity");
-          if(!best || rtt < best.rtt) best = { offset: offset, rtt: rtt };
+          got.push({ offset: offset, rtt: rtt });
         }, function(){ /* 한 번 실패는 넘어감 */ });
       });
     }
-    return chain.then(function(){ return best; });
+    return chain.then(function(){
+      if(!got.length) return null;
+      got.sort(function(a, b){ return a.rtt - b.rtt; });
+      const bestRtt = got[0].rtt;
+      // 왕복이 가장 짧은 표본들과 비슷한 표본들만 모아 중앙값을 씀 (한 번의 튄 값에 흔들리지 않게)
+      const pool = got.filter(function(s){ return s.rtt <= bestRtt * 1.6 + 40; });
+      const offs = pool.map(function(s){ return s.offset; }).sort(function(a, b){ return a - b; });
+      const med = offs[Math.floor((offs.length - 1) / 2)];
+      const spread = offs[offs.length - 1] - offs[0];
+      const rttAvg = pool.reduce(function(a, s){ return a + s.rtt; }, 0) / pool.length;
+      return { offset: med, rtt: rttAvg, spread: spread, n: got.length, used: pool.length };
+    });
   }
 
   let measuring = false;
@@ -574,7 +585,7 @@
         return;
       }
       const src = SOURCES[idx++];
-      measureWith(src, src.headerOnly ? 3 : 4).then(function(best){
+      measureWith(src, src.headerOnly ? 4 : 5).then(function(best){
         if(best){ finish({ src: src, best: best }); }
         else { next(); }
       }, function(){ next(); });
@@ -590,7 +601,7 @@
         return;
       }
       const off = Math.round(hit.best.offset);
-      const unc = Math.round(hit.best.rtt / 2 + (hit.src.extraUnc || 0));
+      const unc = Math.round(hit.best.rtt / 2 + (hit.src.extraUnc || 0) + (hit.best.spread || 0) / 2);
       state.deviceOffset = hit.best.offset;
       state.deviceUnc = unc;
       state.measuredBy = hit.src.name;
@@ -601,7 +612,7 @@
       el.measureOut.innerHTML =
         "내 폰 시계는 표준시보다 <b>" + (off === 0 ? "0ms" : Math.abs(off) + "ms " + word) + "</b> " +
         "(추정 오차 ±" + unc + "ms)<br>" +
-        "<span class='muted'>측정 방식: " + hit.src.name + " · 왕복 " + Math.round(hit.best.rtt) + "ms</span>";
+        "<span class='muted'>측정 방식: " + hit.src.name + " · 왕복 " + Math.round(hit.best.rtt) + "ms · 표본 " + hit.best.used + "/" + hit.best.n + "개</span>";
       renderVerdict();
     }
     next();
