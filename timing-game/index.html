@@ -653,17 +653,32 @@
     beepAt(ac.currentTime, freq, dur, vol, type);
   }
 
-  /* 5 · 4 · 3 · 2 · 1 매초 신호음 + 0.000 정각음 — 오디오 시계에 미리 예약해 박자를 정확히 */
+  /* 5 · 4 · 3 · 2 · 1 매초 신호음 + 0.000 정각음 — 카운트다운 시계에 맞춰 미리 예약해 박자를 정확히 */
+  let tickScheduling = false;
   function scheduleTicks(){
     stopTicks();
-    if(!state.sound || !ac) return;
-    const base = ac.currentTime;
+    if(!state.sound || !ac || game.phase !== "run") return;
+    if(ac.state !== "running"){
+      // 폰에서 처음 누를 때는 소리가 잠자다가 열림 — 열린 뒤에 남은 박자를 예약
+      if(ac.resume && !tickScheduling){
+        tickScheduling = true;
+        ac.resume().then(function(){ tickScheduling = false; scheduleTicks(); }, function(){ tickScheduling = false; });
+      }
+      return;
+    }
+    const base = ac.currentTime;                 // 오디오 시계의 '지금'
+    const nowSrv = epochNow() - game.lead;       // 게임 시계의 '지금'
     for(let k = 5; k >= 1; k--){
-      const o = beepAt(base + (5 - k), k === 1 ? 980 : 720, k === 1 ? 0.07 : 0.05, k === 1 ? 0.16 : 0.13, "square");
+      const at = base + (game.target - k * 1000 - nowSrv) / 1000;
+      if(at < base) continue;                    // 이미 지난 박자는 건너뜀
+      const o = beepAt(at, k === 1 ? 980 : 720, k === 1 ? 0.07 : 0.05, k === 1 ? 0.16 : 0.13, "square");
       if(o) game.ticks.push(o);
     }
-    const z = beepAt(base + 5, 560, 0.14, 0.17, "triangle");
-    if(z) game.ticks.push(z);
+    const zAt = base + (game.target - nowSrv) / 1000;
+    if(zAt > base){
+      const z = beepAt(zAt, 560, 0.14, 0.17, "triangle");
+      if(z) game.ticks.push(z);
+    }
   }
   function stopTicks(){
     if(!game || !game.ticks) return;
