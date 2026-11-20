@@ -404,7 +404,7 @@
       el.syncState.textContent = "측정 전";
     }else{
       const o = Math.round(state.deviceOffset);
-      el.syncState.textContent = "폰 " + (o >= 0 ? "+" : "") + o + "ms" + (state.manual ? " · 조정 " + (-state.manual > 0 ? "+" : "") + (-state.manual) + "ms" : "");
+      el.syncState.textContent = "폰 " + (o >= 0 ? "+" : "") + o + "ms" + (state.manual ? " · " + (state.manual > 0 ? "늦게 " : "빠르게 ") + Math.abs(state.manual) + "ms" : "");
     }
     requestAnimationFrame(tickTop);
   }
