@@ -103,6 +103,16 @@
   .verdict .v-main{font-size:18px; font-weight:900; color:#fff; letter-spacing:-.3px}
   .verdict .v-sub{font-size:12.5px; color:#ffd0de; margin-top:4px; font-variant-numeric:tabular-nums}
   .verdict .v-note{font-size:11.5px; color:var(--muted); margin-top:7px}
+  .v-range{
+    margin-top:9px; padding:8px 11px; border-radius:11px;
+    font-size:13px; font-weight:800; color:#bdf3dd; line-height:1.45;
+    background:rgba(56,211,159,.10); border:1px solid rgba(56,211,159,.38);
+    font-variant-numeric:tabular-nums;
+  }
+  .v-range small{display:block; font-weight:600; font-size:11.5px; color:#9aa0bd; margin-top:3px}
+  .v-range.warn{color:#ffe0a8; background:rgba(255,200,97,.10); border-color:rgba(255,200,97,.45)}
+  .v-range.warn small{color:#e8cf9f}
+  .v-range.unmeasured{color:var(--muted); background:#0f111b; border-color:var(--line); font-weight:700}
   .split{display:grid; grid-template-columns:1fr 1fr; gap:8px}
   .switch{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -300,7 +310,8 @@
 
     <div class="verdict" id="verdict">
       <div class="v-main" id="vMain">정각 00.000초에 누르기</div>
-      <div class="v-sub" id="vSub">내 폰 시계 60.000초</div>
+      <div class="v-sub" id="vSub">내 폰 시계 00.000초</div>
+      <div class="v-range unmeasured" id="vRange">오차 가능 범위: 측정 전</div>
       <div class="v-note" id="vNote">팬즈 · 폰 오차 0ms(측정 전) · 미세조정 0ms</div>
     </div>
   </section>
@@ -483,7 +494,7 @@
     nextLeft: $("nextLeft"), syncState: $("syncState"),
     measureBtn: $("measureBtn"), measureOut: $("measureOut"), manual: $("manual"),
     presets: $("presets"), serverSeg: $("serverSeg"), serverNote: $("serverNote"), modeSeg: $("modeSeg"), rangeSeg: $("rangeSeg"),
-    vMain: $("vMain"), vSub: $("vSub"), vNote: $("vNote"),
+    vMain: $("vMain"), vSub: $("vSub"), vNote: $("vNote"), vRange: $("vRange"),
     sound: $("sound"), stage: $("stage"), stHead: $("stHead"), stTime: $("stTime"),
     stHint: $("stHint"),
     gauge: $("gauge"), gRuler: $("gRuler"), gTicks: $("gTicks"), gFill: $("gFill"),
@@ -595,6 +606,22 @@
       el.vMain.textContent = "정각(내 폰 00초)보다 " + abs + "ms 먼저 누르기";
     }
     el.vSub.textContent = "내 폰 시계 " + pressSec + "초에 누르기";
+
+    // ±오차 가능 범위 (측정한 왕복 지연에서 나온 추정치)
+    const unc = (typeof state.deviceUnc === "number" && isFinite(state.deviceUnc)) ? Math.round(state.deviceUnc) : null;
+    if(unc === null){
+      el.vRange.className = "v-range unmeasured";
+      el.vRange.innerHTML = "오차 가능 범위: 측정 전";
+    }else if(unc === 0){
+      el.vRange.className = "v-range";
+      el.vRange.innerHTML = "오차 가능 범위: 거의 없음(±1ms 이내)<small>내 폰 시계 " + pressSec + "초에 맞춰 누르면 돼요</small>";
+    }else{
+      el.vRange.className = "v-range" + (unc >= 150 ? " warn" : "");
+      el.vRange.innerHTML =
+        "오차 가능 범위: ±" + unc + "ms" +
+        "<small>내 폰 시계 " + fmtSec(60000 + lead - unc) + "초 ~ " + fmtSec(60000 + lead + unc) + "초 사이</small>" +
+        (unc >= 150 ? "<small><b>네트워크가 흔들려서 오차가 커요. 와이파이/5G 바꿔서 다시 눌러 보세요.</b></small>" : "");
+    }
     const dev = state.deviceOffset === null ? "측정 전" : ((state.deviceOffset >= 0 ? "+" : "") + Math.round(state.deviceOffset) + "ms");
     const adj = (state.manual > 0 ? "+" : "") + state.manual + "ms";
     el.vNote.textContent = SERVER_LABEL[state.server] + " · 폰 오차 " + dev + " · 미세조정 " + adj;
@@ -653,12 +680,16 @@
       }, function(err){ clearTimeout(timer); throw err; });
   }
 
-  function measureWith(src, tries){
+  function measureWith(src, samples, warmup){
+    warmup = warmup || 0;
     const got = [];
     let chain = Promise.resolve();
-    for(let i = 0; i < tries; i++){
+    const total = warmup + samples;
+    for(let i = 0; i < total; i++){
+      const isWarm = i < warmup;
       chain = chain.then(function(){
         return sampleOnce(src).then(function(r){
+          if(isWarm) return;                    // 첫 요청은 TCP/TLS 핸드셰이크가 섞여서 버림
           const rtt = r.t1 - r.t0;
           // 내 폰 시계 - 표준시 (양수 = 폰이 빠름, 음수 = 폰이 느림)
           const offset = (r.t0 + r.t1) / 2 - r.serverMs;
@@ -670,14 +701,13 @@
     return chain.then(function(){
       if(!got.length) return null;
       got.sort(function(a, b){ return a.rtt - b.rtt; });
-      const bestRtt = got[0].rtt;
-      // 왕복이 가장 짧은 표본들과 비슷한 표본들만 모아 중앙값을 씀 (한 번의 튄 값에 흔들리지 않게)
-      const pool = got.filter(function(s){ return s.rtt <= bestRtt * 1.6 + 40; });
-      const offs = pool.map(function(s){ return s.offset; }).sort(function(a, b){ return a - b; });
+      const top = got.slice(0, Math.min(3, got.length));      // 왕복이 가장 짧은 상위 3개
+      const offs = top.map(function(s){ return s.offset; }).sort(function(a, b){ return a - b; });
       const med = offs[Math.floor((offs.length - 1) / 2)];
+      const rttMed = top.reduce(function(a, s){ return a + s.rtt; }, 0) / top.length;
       const spread = offs[offs.length - 1] - offs[0];
-      const rttAvg = pool.reduce(function(a, s){ return a + s.rtt; }, 0) / pool.length;
-      return { offset: med, rtt: rttAvg, spread: spread, n: got.length, used: pool.length };
+      const unc = Math.round(rttMed / 2 + spread / 2 + (src.extraUnc || 0));
+      return { offset: med, rtt: rttMed, bestRtt: got[0].rtt, spread: spread, unc: unc, n: got.length, used: top.length };
     });
   }
 
@@ -698,7 +728,9 @@
         return;
       }
       const src = SOURCES[idx++];
-      measureWith(src, src.headerOnly ? 4 : 5).then(function(best){
+      el.measureOut.innerHTML = "표준시 서버에 연결하는 중이에요… <span class='muted'>(" + src.name + " 연속 요청)</span>";
+      // 워밍업 2회 버리고 연속 8회 요청 → 왕복이 가장 짧은 3개 중앙값
+      measureWith(src, src.headerOnly ? 6 : 8, 2).then(function(best){
         if(best){ finish({ src: src, best: best }); }
         else { next(); }
       }, function(){ next(); });
@@ -714,7 +746,7 @@
         return;
       }
       const off = Math.round(hit.best.offset);
-      const unc = Math.round(hit.best.rtt / 2 + (hit.src.extraUnc || 0) + (hit.best.spread || 0) / 2);
+      const unc = hit.best.unc;
       state.deviceOffset = hit.best.offset;
       state.deviceUnc = unc;
       state.measuredBy = hit.src.name;
@@ -723,9 +755,12 @@
       const word = off > 0 ? "빠름" : (off < 0 ? "느림" : "정확");
       el.measureOut.className = "out good";
       el.measureOut.innerHTML =
-        "내 폰 시계는 표준시보다 <b>" + (off === 0 ? "0ms" : Math.abs(off) + "ms " + word) + "</b> " +
+        "내 폰 시계는 표준시보다 <b>" + (off === 0 ? "0ms 차이 없음" : Math.abs(off) + "ms " + word) + "</b> " +
         "(추정 오차 ±" + unc + "ms)<br>" +
-        "<span class='muted'>측정 방식: " + hit.src.name + " · 왕복 " + Math.round(hit.best.rtt) + "ms · 표본 " + hit.best.used + "/" + hit.best.n + "개</span>";
+        "<span class='muted'>" + hit.src.name + " · 왕복 최소 " + Math.round(hit.best.bestRtt) + "ms · " +
+        "표본 " + hit.best.n + "개 중 왕복 짧은 " + hit.best.used + "개 중앙값</span>" +
+        (hit.best.n < 3 ? "<br><span class='muted'>표본이 적어 정확도가 떨어져요. 한 번 더 눌러 주세요.</span>" : "") +
+        (unc >= 150 ? "<br><b>네트워크가 흔들려서 오차가 커요. 와이파이/5G 바꿔서 다시 눌러 보세요.</b>" : "");
       renderVerdict();
     }
     next();
